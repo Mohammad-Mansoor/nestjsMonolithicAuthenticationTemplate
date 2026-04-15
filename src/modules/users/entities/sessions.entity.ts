@@ -25,6 +25,12 @@ export class Sessions {
     @Column({ nullable: true })
     deviceId: string;
 
+    @Column({ nullable: true })
+    deviceName: string; // e.g. "iPhone 14 Pro Max"
+
+    @Column({ nullable: true })
+    fingerprint: string;
+
 
     @Column({ nullable: true })
     deviceType: string;

@@ -24,6 +24,12 @@ export class UserDevice {
   @Column()
   deviceId: string; // The long-lived persistent identifier (UUID)
 
+  @Column({ nullable: true })
+  deviceName: string; // e.g. "iPhone 14 Pro Max"
+
+  @Column({ nullable: true })
+  deviceType: string; // e.g. "Mobile", "Desktop"
+
   @Column()
   fingerprint: string; // Hashed browser/hardware profile
 

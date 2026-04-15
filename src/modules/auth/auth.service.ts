@@ -56,8 +56,11 @@ export class AuthService {
 
     // --- ADVANCED DEVICE IDENTITY LOGIC ---
     const persistentDeviceIdFromCookie = req.cookies['device_id'];
-    const currentFingerprint = this.generateFingerprint(req);
-    
+    const currentFingerprint = (req.headers['x-fingerprint'] as string) || this.generateFingerprint(req);
+    const incomingDeviceName = req.headers['x-device-name'] as string;
+    const incomingDeviceType = req.headers['x-device-type'] as string;
+    const incomingOs = req.headers['x-os'] as string;
+    const incomingBrowser = req.headers['x-browser'] as string;
     // Check if this is a known device for this user
     let knownDevice = await this.userDeviceRepository.findOne({
       where: [
@@ -76,9 +79,11 @@ export class AuthService {
         userId: user.id,
         deviceId: newDeviceId,
         fingerprint: currentFingerprint,
+        deviceName: incomingDeviceName,
+        deviceType: incomingDeviceType || this.getDeviceType(req.get('user-agent') || ''),
         userAgent: req.get('user-agent') || '',
-        browser: this.getBrowser(req.get('user-agent') || ''),
-        os: this.getOS(req.get('user-agent') || ''),
+        browser: incomingBrowser || this.getBrowser(req.get('user-agent') || ''),
+        os: incomingOs || this.getOS(req.get('user-agent') || ''),
         lastIp: req.ip || '',
         lastLoginAt: new Date(),
       });
@@ -88,6 +93,10 @@ export class AuthService {
       knownDevice.lastIp = req.ip || '';
       knownDevice.lastLoginAt = new Date();
       knownDevice.fingerprint = currentFingerprint; // Update fingerprint in case of browser updates
+      knownDevice.deviceName = incomingDeviceName || knownDevice.deviceName;
+      knownDevice.deviceType = incomingDeviceType || knownDevice.deviceType || this.getDeviceType(req.get('user-agent') || '');
+      knownDevice.browser = incomingBrowser || knownDevice.browser || this.getBrowser(req.get('user-agent') || '');
+      knownDevice.os = incomingOs || knownDevice.os || this.getOS(req.get('user-agent') || '');
       await this.userDeviceRepository.save(knownDevice);
     }
     // ----------------------------------------
@@ -124,7 +133,7 @@ export class AuthService {
   async refreshToken(req: Request, res: Response) {
     const oldRefreshToken = req.cookies['refresh_token'];
     const persistentDeviceId = req.cookies['device_id']; // Using persistent security cookie
-    const currentFingerprint = this.generateFingerprint(req);
+    const currentFingerprint = (req.headers['x-fingerprint'] as string) || this.generateFingerprint(req);
 
     if (!oldRefreshToken) {
       throw new UnauthorizedException('Refresh token missing');
@@ -294,15 +303,23 @@ export class AuthService {
     req: Request,
   ): Partial<Sessions> {
     const userAgent = req.get('user-agent') || '';
+    const incomingDeviceName = req.headers['x-device-name'] as string;
+    const incomingDeviceType = req.headers['x-device-type'] as string;
+    const incomingOs = req.headers['x-os'] as string;
+    const incomingBrowser = req.headers['x-browser'] as string;
+    const incomingFingerprint = (req.headers['x-fingerprint'] as string) || this.generateFingerprint(req);
+
     return {
       id: sessionId,
       userId,
       ipAddress: req.ip,
       userAgent,
-      browser: this.getBrowser(userAgent),
-      os: this.getOS(userAgent),
+      browser: incomingBrowser || this.getBrowser(userAgent),
+      os: incomingOs || this.getOS(userAgent),
       deviceId: deviceId, // Using the persistent deviceId now
-      deviceType: this.getDeviceType(userAgent),
+      deviceName: incomingDeviceName,
+      fingerprint: incomingFingerprint,
+      deviceType: incomingDeviceType || this.getDeviceType(userAgent),
       refreshToken: this.generateRefreshToken(),
       expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       lastActiveAt: new Date(),

@@ -87,6 +87,10 @@ export class JwtAuthGuard implements CanActivate {
    * This survives history clears as it relies on browser and OS metadata.
    */
   private generateFingerprint(req: Request): string {
+    const customFingerprint = req.headers['x-fingerprint'] as string;
+    if (customFingerprint) {
+      return customFingerprint;
+    }
     const userAgent = req.get('user-agent') || '';
     const acceptLang = req.get('accept-language') || '';
     const platform = req.get('sec-ch-ua-platform') || ''; 
