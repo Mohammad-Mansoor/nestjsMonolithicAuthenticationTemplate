@@ -8,10 +8,17 @@ import cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { AppModule } from './app.module';
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter';
-
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.use(cookieParser() as any);
+
+  // CORS Configuration
+  app.enableCors({
+    origin: ['http://localhost:3000'],
+    methods: 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS',
+    allowedHeaders: 'Content-Type,Authorization,x-fingerprint,x-device-name,x-device-type,x-os,x-browser,x-client-id',
+    credentials: true,
+  });
 
   // Global Filter
   app.useGlobalFilters(new AllExceptionsFilter());
@@ -38,7 +45,6 @@ async function bootstrap() {
 
   // Serialization
   app.useGlobalInterceptors(new ClassSerializerInterceptor(app.get(Reflector)));
-
 
   const configService = app.get(ConfigService);
   const port = configService.get<number>('PORT') || 3000;

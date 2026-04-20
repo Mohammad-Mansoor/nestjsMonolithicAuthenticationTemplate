@@ -9,6 +9,7 @@ import { AuthModule } from './modules/auth/auth.module';
 import { RedisCacheModule } from './common/redis/redis-cache.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { APP_GUARD } from '@nestjs/core';
+import { NotificationsModule } from './notifications/notifications.module';
 
 @Module({
   imports: [
@@ -29,12 +30,14 @@ import { APP_GUARD } from '@nestjs/core';
         // dropSchema:true,
         autoLoadEntities: true,
       }),
+      //
       inject: [ConfigService],
     }),
     UsersModule,
     FileModule,
     AuthModule,
     RedisCacheModule,
+    NotificationsModule,
   ],
   controllers: [AppController],
   providers: [AppService, {provide: APP_GUARD, useClass: JwtAuthGuard}],

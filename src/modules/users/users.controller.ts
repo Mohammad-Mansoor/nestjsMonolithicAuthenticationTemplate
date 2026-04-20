@@ -6,6 +6,7 @@ import { UpdateUserDto } from './dto/update-user.dto';
 import { FileValidationPipe } from '../../common/pipes/file.validation.pipe';
 import { multerConfig } from '../../infrastructure/storage/multer.config';
 import { QueryOptionsDto } from 'src/common/dto/query-options.dto';
+import { Public } from '../auth/decorators/auth.decorator';
 //
 @Controller('users')
 export class UsersController {
@@ -23,6 +24,9 @@ export class UsersController {
     return this.usersService.updateProfileImage(id, file);
   }
 //
+
+
+@Public()
   @Post()
   @UseInterceptors(FileInterceptor('file', multerConfig('userProfile')))
   create(
@@ -42,7 +46,7 @@ export class UsersController {
   findOne(@Param('id', ParseUUIDPipe) id: string) {
     return this.usersService.findOne(id);
   }
-
+//
   @Patch(':id')
   update(@Param('id', ParseUUIDPipe) id: string, @Body() updateUserDto: UpdateUserDto) {
     return this.usersService.update(id, updateUserDto);

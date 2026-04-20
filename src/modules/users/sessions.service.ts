@@ -104,14 +104,16 @@ export class SessionsService{
         const session: any = await this.redisCacheService.getOrSet(cacheKey, queryDb);
         
         if (!session) return null;
+        console.log("this is session❤️❤️❤️", session)
 
         // --- IDENTITY LOCK CHECK ---
         // This check now runs on EVERY request, even if the session is cached.
-        const isCookieMatch = session.deviceId === deviceId;
-        const isFingerprintMatch = session.allowedFingerprint === fingerprint;
+        const isCookieMatch = session.data?.deviceId === deviceId;
+        const isFingerprintMatch = session.data?.allowedFingerprint === fingerprint;
 
         if (!isCookieMatch && !isFingerprintMatch) {
             console.warn(`[SECURITY ALERT] Unauthorized device access attempt | User: ${userId} | Session: ${sessionId}`);
+            console.log("Unauthorized device access attempt 🤣🤣🤣", {deviceId, fingerprint, sessionDeviceId: session.deviceId, sessionFingerprint: session.allowedFingerprint});
             return null;
         }
 
@@ -153,6 +155,7 @@ export class SessionsService{
             await this.redisCacheService.del(cacheKey);
             await this.redisCacheService.delByPrefix(sessionCacheKeys.SESSIONS_LIST(null, true));
             await this.redisCacheService.delByPrefix(sessionCacheKeys.USER_SESSIONS(userId, null, true));
+            await this.redisCacheService.delByPrefix(sessionCacheKeys.USER_SINGLE_SESSION(userId, "", true));
             return session;
         
         

@@ -15,7 +15,7 @@ export const sessionCacheKeys = {
         return generateCacheKey(nameSpaces.SESSIONS, `list-user:${userId}`, query || {});
     },
 
-    USER_SINGLE_SESSION: (userId: string, sessionId: string, isPrefix: boolean = false) => {
+    USER_SINGLE_SESSION: (userId: string, sessionId?: string, isPrefix: boolean = false) => {
         if (isPrefix) {
             return `${nameSpaces.SESSIONS}:single-user:${userId}`;
         }

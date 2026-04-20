@@ -17,6 +17,10 @@ import Redis from 'ioredis';
 export class RedisCacheService implements OnModuleInit {
   private client: Redis;
 
+  public get getClient(): Redis {
+    return this.client;
+  }
+
   constructor(private readonly configService: ConfigService) {}
 
   /**

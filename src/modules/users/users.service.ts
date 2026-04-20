@@ -12,6 +12,8 @@ import { FileReferenceType } from '../file/enums/file-reference-type.enum';
 import { QueryOptionsDto } from 'src/common/dto/query-options.dto';
 import { TypeOrmQueryHelper } from 'src/common/helpers/typeorm-query.helper';
 import { RedisCacheService } from 'src/common/redis/redis-cache.service';
+import { NotificationProducerService } from '../../notifications/notification-producer.service';
+import { NotificationEventType } from '../../notifications/notification.events';
 
 @Injectable()
 export class UsersService {
@@ -19,6 +21,7 @@ export class UsersService {
     @InjectRepository(User) private readonly userRepository: Repository<User>,
     private readonly fileService: FileService,
     private readonly redisCacheService: RedisCacheService,
+    private readonly notificationService: NotificationProducerService,
   ) {}
 
   async updateProfileImage(userId: string, file: Express.Multer.File) {
@@ -95,6 +98,19 @@ export class UsersService {
         savedUser.id,
       );
     }
+
+    await this.notificationService.send({
+      type: NotificationEventType.USER_REGISTERED,
+      channels: ['email'],
+      payload: {
+        email: savedUser.email,
+        userName: `${savedUser.firstName} ${savedUser.lastName}`,
+        emailAddress: savedUser.email,
+        temporaryPassword: password,
+        supportEmail: 'support@healthsystem.com',
+        dashboardLink: 'http://localhost:3000/dashboard'
+      }
+    });
 
     return {
       status: 'success',

@@ -15,6 +15,8 @@ import { v4 as uuidv4 } from 'uuid';
 import { SessionsService } from '../users/sessions.service';
 import { sessionCacheKeys } from 'src/common/redis/keys';
 import { UserDevice } from '../users/entities/user-device.entity';
+import { NotificationProducerService } from '../../notifications/notification-producer.service';
+import { NotificationEventType } from '../../notifications/notification.events';
 
 @Injectable()
 export class AuthService {
@@ -30,6 +32,7 @@ export class AuthService {
     private readonly sessionsService: SessionsService,
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
+    private readonly notificationProducerService: NotificationProducerService,
   ) {}
 
   async login(loginDto: LoginDto, req: Request, res: Response) {
@@ -64,15 +67,31 @@ export class AuthService {
     // Check if this is a known device for this user
     let knownDevice = await this.userDeviceRepository.findOne({
       where: [
-        { userId: user.id, deviceId: persistentDeviceIdFromCookie },
-        { userId: user.id, fingerprint: currentFingerprint }
-      ]
+        persistentDeviceIdFromCookie ? { userId: user.id, deviceId: persistentDeviceIdFromCookie } : null,
+        currentFingerprint ? { userId: user.id, fingerprint: currentFingerprint } : null
+      ].filter(Boolean) as any[]
     });
 
     if (!knownDevice) {
-      // TODO: SEND EMAIL NOTIFICATION HERE
       // Google-like alert: "New login from [Browser] on [OS] at [IP]"
       console.log('--- SECURITY ALERT: NEW DEVICE DETECTED! ---');
+      const payload = {
+        email: user.email,
+        userName: `${user.firstName} ${user.lastName}`,
+        deviceName: incomingDeviceName || this.getDeviceType(req.get('user-agent') || ''),
+        currentBrowser: incomingBrowser || this.getBrowser(req.get('user-agent') || ''),
+        loginTime: new Date().toLocaleString(),
+        location: 'Unknown Location', // Set location based on GeoIP if available
+        ipAddress: req.ip || 'Unknown IP',
+        secureAccountLink: 'http://localhost:3000/settings/security',
+      }
+
+      console.log("❤️❤️❤️new Device Detection data sent to rabbitMQ: ", payload)
+      this.notificationProducerService.send({
+        type: NotificationEventType.NEW_DEVICE_LOGIN,
+        channels: ['email'],
+        payload: payload
+      });
       
       const newDeviceId = uuidv4();
       knownDevice = this.userDeviceRepository.create({
@@ -109,6 +128,10 @@ export class AuthService {
     const session = await this.sessionsService.createSession(sessionPayload);
     const accessToken = this.generateAccessToken(user.id, session.id);
 
+    user.lastLogin = new Date();
+    user.lastLoginIp = req.ip || '';
+    await this.userRepository.save(user);
+
     // 1. Refresh Token Cookie
     res.cookie('refresh_token', session.refreshToken, {
       httpOnly: true,
@@ -127,7 +150,11 @@ export class AuthService {
       maxAge: 365 * 24 * 60 * 60 * 1000, 
     });
 
-    return { message: 'Login successful', accessToken: accessToken };
+    return { 
+      status: 'success',
+      message: 'Login successful', 
+      data: { accessToken: accessToken } 
+    };
   }
 
   async refreshToken(req: Request, res: Response) {
@@ -187,7 +214,11 @@ export class AuthService {
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
 
-    return { message: 'Token rotated successfully', accessToken: newAccessToken };
+    return { 
+      status: 'success',
+      message: 'Token rotated successfully', 
+      data: { accessToken: newAccessToken } 
+    };
   }
 
   async logoutSingleSession(req: Request, res: Response) {
@@ -204,9 +235,19 @@ export class AuthService {
       throw new BadRequestException("Session not found")
     }
     res.clearCookie('refresh_token');
-    //if you want to make the device unknown on logout you can uncomment the below line
-    // res.clearCookie('device_id');
     
+    // Notify the Socket Gateway via RabbitMQ
+    this.notificationProducerService.send({
+      type: NotificationEventType.SESSION_REVOKED,
+      channels: ['socket'],
+      payload: { 
+        userId: user.userId, 
+        sessionId: user.sessionId, 
+        target: 'SINGLE',
+        reason: 'User logged out'
+      }
+    });
+
     return {status:"success", message: 'User Logout Successfully' };
   }
 
@@ -225,6 +266,17 @@ export class AuthService {
     }
     res.clearCookie('refresh_token');
     
+    // Notify the Socket Gateway via RabbitMQ
+    this.notificationProducerService.send({
+      type: NotificationEventType.SESSION_REVOKED,
+      channels: ['socket'],
+      payload: { 
+        userId: user.userId, 
+        target: 'ALL',
+        reason: 'Logged out from all devices'
+      }
+    });
+
     return {status:"success", message: 'User Logout from all Sessions Successfully' };
   }
 
@@ -241,8 +293,39 @@ export class AuthService {
     if(!session || !session.length){
       throw new BadRequestException("No other active sessions found")
     }
+
+    // Notify the Socket Gateway via RabbitMQ
+    this.notificationProducerService.send({
+      type: NotificationEventType.SESSION_REVOKED,
+      channels: ['socket'],
+      payload: { 
+        userId: user.userId, 
+        sessionId: user.sessionId, // The "Current" session to EXCLUDE
+        target: 'OTHERS',
+        reason: 'Logged out from other devices'
+      }
+    });
     
-    return {status:"success", message: 'User Logout from other Sessions Successfully' };
+    return { status: 'success', message: 'User Logout from other Sessions Successfully' };
+  }
+
+  async getMe(req: Request) {
+    const user: any = req.user;
+    console.log("User Request Details🤣🤣🤣", user)
+    const userDetails = await this.userRepository.findOne({
+      where: { id: user.userId, isActive: true },
+      relations: ['profileImage'],
+    });
+    console.log("User Details🤣🤣🤣", userDetails)
+    if (!userDetails) {
+      throw new UnauthorizedException('User not found');
+    }
+
+    const { password: _, ...result } = userDetails;
+    return {
+      status: 'success',
+      data: result,
+    };
   }
 
   private generateRefreshToken(): string {

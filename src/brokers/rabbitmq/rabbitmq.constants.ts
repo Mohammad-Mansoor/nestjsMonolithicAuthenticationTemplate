@@ -1,0 +1,1 @@
+export const RABBITMQ_OPTIONS = 'RABBITMQ_OPTIONS';

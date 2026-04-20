@@ -1,4 +1,4 @@
-import { Body, Controller, Headers, Post, Req, Res } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Post, Req, Res } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
 import type { Request, Response } from 'express';
@@ -19,5 +19,25 @@ export class AuthController {
   @Post('refresh-token')
   async refreshToken(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     return this.authService.refreshToken(req, res);
+  }
+
+  @Get('me')
+  async me(@Req() req: Request) {
+    return this.authService.getMe(req);
+  }
+
+  @Post('logout')
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return this.authService.logoutSingleSession(req, res);
+  }
+
+  @Post('logout-all')
+  async logoutAll(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return this.authService.logoutAllSessions(req, res);
+  }
+
+  @Post('logout-other')
+  async logoutOther(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    return this.authService.logoutOtherSessions(req, res);
   }
 }
