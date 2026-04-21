@@ -10,6 +10,7 @@ import { RedisCacheModule } from './common/redis/redis-cache.module';
 import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { NotificationsModule } from './notifications/notifications.module';
+import { UsersNotificationOptionsModule } from './modules/users_notification_options/users_notification_options.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { NotificationsModule } from './notifications/notifications.module';
     AuthModule,
     RedisCacheModule,
     NotificationsModule,
+    UsersNotificationOptionsModule,
   ],
   controllers: [AppController],
   providers: [AppService, {provide: APP_GUARD, useClass: JwtAuthGuard}],

@@ -6,6 +6,7 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
+  Index,
 } from 'typeorm';
 import { User } from './user.entity';
 
@@ -15,6 +16,7 @@ export class UserDevice {
   id: string;
 
   @Column()
+  @Index()
   userId: string;
 
   @ManyToOne(() => User)
@@ -22,6 +24,7 @@ export class UserDevice {
   user: User;
 
   @Column()
+  @Index()
   deviceId: string; // The long-lived persistent identifier (UUID)
 
   @Column({ nullable: true })
@@ -31,6 +34,7 @@ export class UserDevice {
   deviceType: string; // e.g. "Mobile", "Desktop"
 
   @Column()
+  @Index()
   fingerprint: string; // Hashed browser/hardware profile
 
   @Column({ nullable: true })
@@ -49,5 +53,6 @@ export class UserDevice {
   createdAt: Date;
 
   @UpdateDateColumn()
+  @Index()
   lastLoginAt: Date;
 }

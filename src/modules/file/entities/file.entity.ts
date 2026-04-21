@@ -1,4 +1,4 @@
-import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne } from 'typeorm';
+import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, ManyToOne, Index } from 'typeorm';
 import { User } from '../../users/entities/user.entity';
 import { FileReferenceType } from '../enums/file-reference-type.enum';
 
@@ -23,6 +23,7 @@ export class File {
   size: number;
 
   @Column()
+  @Index()
   referenceId: string;
 
   @Column({
@@ -30,6 +31,7 @@ export class File {
     enum: FileReferenceType,
     default: FileReferenceType.OTHER,
   })
+  @Index()
   referenceType: FileReferenceType;
 
   @ManyToOne(() => User, { nullable: true })

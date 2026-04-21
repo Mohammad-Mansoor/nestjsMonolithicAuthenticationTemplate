@@ -14,6 +14,7 @@ import { TypeOrmQueryHelper } from 'src/common/helpers/typeorm-query.helper';
 import { RedisCacheService } from 'src/common/redis/redis-cache.service';
 import { NotificationProducerService } from '../../notifications/notification-producer.service';
 import { NotificationEventType } from '../../notifications/notification.events';
+import { UsersNotificationOptionsService } from '../users_notification_options/users_notification_options.service';
 
 @Injectable()
 export class UsersService {
@@ -22,6 +23,7 @@ export class UsersService {
     private readonly fileService: FileService,
     private readonly redisCacheService: RedisCacheService,
     private readonly notificationService: NotificationProducerService,
+    private readonly usersNotificationOptionService: UsersNotificationOptionsService,
   ) {}
 
   async updateProfileImage(userId: string, file: Express.Multer.File) {
@@ -98,6 +100,8 @@ export class UsersService {
         savedUser.id,
       );
     }
+
+    await this.usersNotificationOptionService.createNotificationOption(savedUser.id);
 
     await this.notificationService.send({
       type: NotificationEventType.USER_REGISTERED,

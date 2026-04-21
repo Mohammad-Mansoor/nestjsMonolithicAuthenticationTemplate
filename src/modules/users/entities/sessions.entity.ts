@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, JoinColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn, ManyToOne, JoinColumn, Index } from "typeorm";
 import { User } from "./user.entity";
 
 @Entity('sessions')
@@ -7,6 +7,7 @@ export class Sessions {
     id: string;
 
     @Column()
+    @Index()
     userId: string;
 
     @ManyToOne(() => User, (user) => user.sessions, { onDelete: 'CASCADE' })
@@ -14,6 +15,7 @@ export class Sessions {
     user: User;
 
     @Column()
+    @Index()
     refreshToken: string;
 
     @Column()
@@ -23,6 +25,7 @@ export class Sessions {
     userAgent: string;
 
     @Column({ nullable: true })
+    @Index()
     deviceId: string;
 
     @Column({ nullable: true })
@@ -36,6 +39,7 @@ export class Sessions {
     deviceType: string;
 
     @Column({ default: true })
+    @Index()
     isValid: boolean;
 
     @Column({ nullable: true })
@@ -45,6 +49,7 @@ export class Sessions {
     browser: string;
 
     @Column()
+    @Index()
     expiresAt: Date;
 
     @Column({ nullable: true })
