@@ -55,9 +55,4 @@ export class UsersNotificationOptionsController {
     return this.service.removeTelegramUsername(userId);
   }
 
-  // Legacy/Default routes
-  @Delete('legacy/:id')
-  remove(@Param('id') id: string) {
-    return this.service.remove(+id);
-  }
 }

@@ -13,7 +13,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { SessionsService } from '../users/sessions.service';
-import { sessionCacheKeys } from 'src/common/redis/keys';
+import { sessionCacheKeys, userDeviceCacheKeys } from 'src/common/redis/keys';
 import { UserDevice } from '../users/entities/user-device.entity';
 import { NotificationProducerService } from '../../notifications/notification-producer.service';
 import { NotificationEventType } from '../../notifications/notification.events';
@@ -36,6 +36,7 @@ export class AuthService {
   ) {}
 
   async login(loginDto: LoginDto, req: Request, res: Response) {
+  
     const user = await this.userRepository
       .createQueryBuilder('user')
       .addSelect('user.password')
@@ -46,7 +47,8 @@ export class AuthService {
     if (!user) {
       throw new BadRequestException('Invalid Credentials');
     }
-
+    const cacheKey = userDeviceCacheKeys.USERS_DEVICES_LIST({}, true);
+    const cacheKeyList = userDeviceCacheKeys.USER_BASE_DEVICES(user?.id, true);
     const isPasswordValid = await bcrypt.compare(
       loginDto.password,
       user.password,
@@ -107,6 +109,9 @@ export class AuthService {
         lastLoginAt: new Date(),
       });
       await this.userDeviceRepository.save(knownDevice);
+    
+      await this.redisCacheService.delByPrefix(cacheKey);
+      await this.redisCacheService.delByPrefix(cacheKeyList);
     } else {
       // Existing device: Update its stats
       knownDevice.lastIp = req.ip || '';
@@ -117,6 +122,8 @@ export class AuthService {
       knownDevice.browser = incomingBrowser || knownDevice.browser || this.getBrowser(req.get('user-agent') || '');
       knownDevice.os = incomingOs || knownDevice.os || this.getOS(req.get('user-agent') || '');
       await this.userDeviceRepository.save(knownDevice);
+      await this.redisCacheService.delByPrefix(cacheKey);
+      await this.redisCacheService.delByPrefix(cacheKeyList);
     }
     // ----------------------------------------
 

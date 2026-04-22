@@ -67,3 +67,20 @@ export const usersCacheKeys = {
         return generateCacheKey(nameSpaces.USERS, 'list-dropdown', query || {});
     },
 }
+
+export const fileCacheKeys = {
+    FILE_SINGLE: (fileId: string | number, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.FILES}:single`;
+        return `${nameSpaces.FILES}:single:${fileId}`;
+    },
+
+    USER_FILES: (uploaderId: string, query?: any, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.FILES}:list-user:${uploaderId}`;
+        return generateCacheKey(nameSpaces.FILES, `list-user:${uploaderId}`, query || {});
+    },
+
+    FILES_LIST: (query?: any, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.FILES}:list`;
+        return generateCacheKey(nameSpaces.FILES, 'list', query || {});
+    },
+}

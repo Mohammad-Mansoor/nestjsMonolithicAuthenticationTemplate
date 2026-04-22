@@ -6,11 +6,13 @@ import {
 } from '@nestjs/common';
 import { UpdateUsersNotificationOptionDto } from './dto/update-users_notification_option.dto';
 import { RedisCacheService } from 'src/common/redis/redis-cache.service';
-import { usersNotificationCacheKeys } from 'src/common/redis/keys';
+import { usersNotificationCacheKeys, usersCacheKeys } from 'src/common/redis/keys';
 import { InjectRepository } from '@nestjs/typeorm';
 import { UsersNotificationOption } from './entities/users_notification_option.entity';
 import { Repository } from 'typeorm';
 import { User } from '../users/entities/user.entity';
+import { TypeOrmQueryHelper } from 'src/common/helpers/typeorm-query.helper';
+import { QueryOptionsDto } from 'src/common/dto/query-options.dto';
 
 @Injectable()
 export class UsersNotificationOptionsService {
@@ -42,6 +44,8 @@ export class UsersNotificationOptionsService {
     });
 
     await this.usersNotificationOptionRepository.save(userNotificationOption);
+    
+    // Invalidate List Prefixes
     await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true));
 
     return {
@@ -64,13 +68,13 @@ export class UsersNotificationOptionsService {
       const options = await manager.findOne(UsersNotificationOption, { where: { userId } });
       if (!options) throw new NotFoundException('User notification options not found');
 
-      user.whatsappNumber = data.whatsappNumber;
-      await manager.save(user);
+      await manager.update(User, userId, { whatsappNumber: data.whatsappNumber });
+      await manager.update(UsersNotificationOption, options.id, { whatsapp: true });
 
-      options.whatsapp = true;
-      await manager.save(options);
-
-      await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
+      // Invalidate Both Entities Caches
+      await this.redisService.del(usersCacheKeys.USERS_SINGLE(userId));
+      await this.redisService.delByPrefix(usersCacheKeys.USERS_LIST({}, true));
+      await this.redisService.del(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
       await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true));
 
       return { status: "success", message: `User WhatsApp number updated successfully` };
@@ -88,13 +92,13 @@ export class UsersNotificationOptionsService {
       const options = await manager.findOne(UsersNotificationOption, { where: { userId } });
       if (!options) throw new NotFoundException('User notification options not found');
 
-      user.whatsappNumber = null;
-      await manager.save(user);
+      await manager.update(User, userId, { whatsappNumber: null });
+      await manager.update(UsersNotificationOption, options.id, { whatsapp: false });
 
-      options.whatsapp = false;
-      await manager.save(options);
-
-      await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
+      // Invalidate Both Entities Caches
+      await this.redisService.del(usersCacheKeys.USERS_SINGLE(userId));
+      await this.redisService.delByPrefix(usersCacheKeys.USERS_LIST({}, true));
+      await this.redisService.del(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
       await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true));
 
       return { status: "success", message: `User WhatsApp number removed successfully` };
@@ -116,14 +120,16 @@ export class UsersNotificationOptionsService {
       const options = await manager.findOne(UsersNotificationOption, { where: { userId } });
       if (!options) throw new NotFoundException('User notification options not found');
 
-      user.telegramUsername = data.telegramUsername;
-      user.telegramId = data.telegramId;
-      await manager.save(user);
+      await manager.update(User, userId, { 
+        telegramUsername: data.telegramUsername, 
+        telegramId: data.telegramId 
+      });
+      await manager.update(UsersNotificationOption, options.id, { telegram: true });
 
-      options.telegram = true;
-      await manager.save(options);
-
-      await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
+      // Invalidate Both Entities Caches
+      await this.redisService.del(usersCacheKeys.USERS_SINGLE(userId));
+      await this.redisService.delByPrefix(usersCacheKeys.USERS_LIST({}, true));
+      await this.redisService.del(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
       await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true));
 
       return { status: "success", message: `User Telegram identity updated successfully` };
@@ -141,14 +147,13 @@ export class UsersNotificationOptionsService {
       const options = await manager.findOne(UsersNotificationOption, { where: { userId } });
       if (!options) throw new NotFoundException('User notification options not found');
 
-      user.telegramUsername = null;
-      user.telegramId = null;
-      await manager.save(user);
+      await manager.update(User, userId, { telegramUsername: null, telegramId: null });
+      await manager.update(UsersNotificationOption, options.id, { telegram: false });
 
-      options.telegram = false;
-      await manager.save(options);
-
-      await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
+      // Invalidate Both Entities Caches
+      await this.redisService.del(usersCacheKeys.USERS_SINGLE(userId));
+      await this.redisService.delByPrefix(usersCacheKeys.USERS_LIST({}, true));
+      await this.redisService.del(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
       await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true));
 
       return { status: "success", message: `User Telegram identity removed successfully` };
@@ -159,42 +164,72 @@ export class UsersNotificationOptionsService {
    * Manual bulk update of notification channel preferences.
    */
   async updateUserNotificationOptions(userId: string, data: UpdateUsersNotificationOptionDto) {
-    const user = await this.userRepository.findOne({ where: { id: userId, isActive: true } });
-    if (!user) throw new NotFoundException('Active user not found');
+    const cacheKey = usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId);
+    const cacheKeyList = usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true);
 
     const options = await this.usersNotificationOptionRepository.findOne({ where: { userId } });
     if (!options) throw new NotFoundException('User notification options not found');
 
-    Object.assign(options, data);
-    await this.usersNotificationOptionRepository.save(options);
-
-    await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId));
-    await this.redisService.delByPrefix(usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST({}, true));
+    await this.usersNotificationOptionRepository.update(options.id, data);
+    
+    // Invalidate Cache
+    await this.redisService.del(cacheKey);
+    await this.redisService.delByPrefix(cacheKeyList);
 
     return { 
       status: "success", 
-      message: `User notification preferences updated successfully`, 
-      data: options 
+      message: `User notification preferences updated successfully`,
+      data: { ...options, ...data }
     };
   }
 
   /**
    * Retrieves all notification options with cache support.
    */
-  async findAllUsersNotificationOptions(query: any) {
-    const cacheKey = usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST(query);
+  async findAllUsersNotificationOptions(options: QueryOptionsDto) {
+    const cacheKey = usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS_LIST(options);
     const queryDB = async () => {
-      return await this.usersNotificationOptionRepository.find({
-        where: query,
-        relations: ['user'],
-      });
+      const { data, meta } = await TypeOrmQueryHelper.for(
+        this.usersNotificationOptionRepository,
+        options,
+        {
+          searchableFields: ['user.firstName', 'user.lastName', 'user.email'],
+          filterableFields: {
+            email: 'email',
+            whatsapp: 'whatsapp',
+            telegram: 'telegram',
+            inapp: 'inapp',
+            socket: 'socket',
+            userId: 'userId',
+          },
+          relations: ['user'],
+          selectFields: [
+            'id',
+            'userId',
+            'email',
+            'whatsapp',
+            'telegram',
+            'inapp',
+            'socket',
+            'user.id',
+            'user.firstName',
+            'user.lastName',
+            'user.email',
+          ],
+          defaultSort: 'id:DESC',
+        },
+        'uno'
+      ).getManyAndMeta();
+      return { data, meta };
     };
 
-    const { data, cached } = await this.redisService.getOrSet(cacheKey, queryDB, query);
+    const { data: result, cached } = await this.redisService.getOrSet(cacheKey, queryDB, options);
+    
     return {
       status: "success",
       message: `User notification options fetched successfully`,
-      data,
+      data: result?.data,
+      meta: result?.meta,
       cache: cached
     };
   }
@@ -212,7 +247,7 @@ export class UsersNotificationOptionsService {
       return option
     };
 
-    const { data, cached } = await this.redisService.getOrSet(cacheKey, queryDB, {});
+    const { data, cached } = await this.redisService.getOrSet(cacheKey, queryDB, { userId });
     return {
       status: "success",
       message: `User notification option fetched successfully`,
@@ -221,11 +256,5 @@ export class UsersNotificationOptionsService {
     };
   }
 
-  update(id: number, updateUsersNotificationOptionDto: UpdateUsersNotificationOptionDto) {
-    return `This action updates a #${id} usersNotificationOption`;
-  }
 
-  remove(id: number) {
-    return `This action removes a #${id} usersNotificationOption`;
-  }
 }

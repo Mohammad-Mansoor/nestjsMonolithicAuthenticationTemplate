@@ -7,19 +7,22 @@ export class UserDeviceController {
         private readonly userDeviceService: UserDeviceService,
     ) {}
 
-@Get('/:userId')
-async getSingleUserDevices(@Param('userId') userId:string, @Query() query: any){
-    return this.userDeviceService.getSingleUserDevices(userId,query);
+@Get('user/:userId')
+async findSingleUserDevices(
+    @Param('userId') userId: string, 
+    @Query() options: Record<string, any>
+) {
+    return this.userDeviceService.findSingleUserDevices(userId, options);
 }
 
-@Get('/:deviceId')
-async getSingleDevice(@Param('deviceId') deviceId:string){
-    return this.userDeviceService.getSingleDevice(deviceId);
+@Get(':deviceId')
+async findOneDevice(@Param('deviceId') deviceId: string) {
+    return this.userDeviceService.findOneDevice(deviceId);
 }
 
-@Get('/')
-async getAllDecives(){
-    return this.userDeviceService.getAllDecives();
+@Get()
+async findAllDevices(@Query() options: Record<string, any>) {
+    return this.userDeviceService.findAllDevices(options);
 }
 
 }
