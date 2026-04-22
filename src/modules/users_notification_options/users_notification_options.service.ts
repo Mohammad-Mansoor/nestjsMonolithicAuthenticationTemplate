@@ -205,7 +205,11 @@ export class UsersNotificationOptionsService {
   async findSingleUserNotificationOptions(userId: string) {
     const cacheKey = usersNotificationCacheKeys.USER_NOTIFICATION_OPTIONS(userId);
     const queryDB = async () => {
-      return await this.usersNotificationOptionRepository.findOne({ where: { userId } });
+      const option  = await this.usersNotificationOptionRepository.findOne({ where: { userId } });
+      if(!option){
+        throw new NotFoundException("Notification Option Not Found!")
+      }
+      return option
     };
 
     const { data, cached } = await this.redisService.getOrSet(cacheKey, queryDB, {});

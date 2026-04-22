@@ -199,7 +199,7 @@ export class RedisCacheService implements OnModuleInit {
 
     // ⏱ Determine if cache should be permanent or temporary
     const isPermanent = this.isPermanentQuery(query);
-    const ttl = isPermanent ? undefined : 300; // 5 min TTL
+    const ttl = isPermanent ? 86400 : 300; // 5 min TTL
 
     await this.set(key, freshData, ttl, namespace);
 

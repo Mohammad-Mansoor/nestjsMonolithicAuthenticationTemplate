@@ -51,3 +51,19 @@ export const userDeviceCacheKeys = {
         return generateCacheKey(nameSpaces.USER_DEVICE, 'list', query || {});
     },
 }
+
+export const usersCacheKeys = {
+    USERS_LIST: (query?: any, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.USERS}:list`;
+        return generateCacheKey(nameSpaces.USERS, 'list', query || {});
+    },
+    USERS_SINGLE: (userId: string, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.USERS}:single`;
+        return `${nameSpaces.USERS}:single:${userId}`;
+    },
+
+    USERS_LIST_FOR_DROPDOWN: (query?: any, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.USERS}:list-dropdown`;
+        return generateCacheKey(nameSpaces.USERS, 'list-dropdown', query || {});
+    },
+}

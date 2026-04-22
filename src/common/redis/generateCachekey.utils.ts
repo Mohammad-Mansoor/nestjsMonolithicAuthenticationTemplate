@@ -19,6 +19,11 @@ export function generateCacheKey(
   // Extract language for clarity
   const lang = query?.lang || 'en';
 
+  // Remove language from query to avoid duplicate keys if you dont want language base cache
+  // if you want language base cacheing then comment this line
+  // and in the end of this function where it is returning the key we should add lang variable in the key check return line i have comment there also
+  delete query.lang;
+
   // Create a stable hash from query params (ignore order)
   const queryString = JSON.stringify(
     Object.keys(query)
@@ -38,5 +43,8 @@ export function generateCacheKey(
     .digest('hex')
     .slice(0, 10);
 
-  return `${namespace}:${baseKey}:${lang}:${hash}`;
+
+    // if you want language base cacheing then unccoment this line and comment the below line
+  // return `${namespace}:${baseKey}:${lang}:${hash}`;
+  return `${namespace}:${baseKey}:${hash}`;
 }

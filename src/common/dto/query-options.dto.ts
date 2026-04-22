@@ -31,22 +31,5 @@ export class QueryOptionsDto {
   @IsString()
   search?: string;
 
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  searchFields?: string[];
-
-  @IsOptional()
-  @IsObject()
-  filters?: Record<string, any>;
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  includes?: string[];
-
-  @IsOptional()
-  @IsArray()
-  @IsString({ each: true })
-  fields?: string[];
+  [key: string]: any; // Allow flat filter parameters (e.g. ?status=active, ?price_gt=100)
 }

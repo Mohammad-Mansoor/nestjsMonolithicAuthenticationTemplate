@@ -15,6 +15,7 @@ import { RedisCacheService } from 'src/common/redis/redis-cache.service';
 import { NotificationProducerService } from '../../notifications/notification-producer.service';
 import { NotificationEventType } from '../../notifications/notification.events';
 import { UsersNotificationOptionsService } from '../users_notification_options/users_notification_options.service';
+import { usersCacheKeys } from 'src/common/redis/keys';
 
 @Injectable()
 export class UsersService {
@@ -27,6 +28,8 @@ export class UsersService {
   ) {}
 
   async updateProfileImage(userId: string, file: Express.Multer.File) {
+    const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
+    const cacheKeySingle = usersCacheKeys.USERS_SINGLE(userId);
     const user = await this.userRepository.findOne({
       where: { id: userId },
       relations: ['profileImage'],
@@ -55,7 +58,8 @@ export class UsersService {
 
     user.profileImage = savedFile;
     const updatedUser = await this.userRepository.save(user);
-
+    await this.redisCacheService.delByPrefix(cacheKey);
+    await this.redisCacheService.del(cacheKeySingle);
     return {
       status: 'success',
       message: 'Profile image updated successfully',
@@ -63,7 +67,8 @@ export class UsersService {
     };
   }
 
-  async create(createUserDto: CreateUserDto, file: Express.Multer.File) {
+  async createUser(createUserDto: CreateUserDto, file: Express.Multer.File) {
+    const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
     const user = await this.userRepository.findOne({
       where: { email: createUserDto.email },
     });
@@ -102,7 +107,7 @@ export class UsersService {
     }
 
     await this.usersNotificationOptionService.createNotificationOption(savedUser.id);
-
+await this.redisCacheService.delByPrefix(cacheKey);
     await this.notificationService.send({
       type: NotificationEventType.USER_REGISTERED,
       channels: ['email'],
@@ -116,6 +121,7 @@ export class UsersService {
       }
     });
 
+
     return {
       status: 'success',
       message: 'User created successfully',
@@ -123,39 +129,99 @@ export class UsersService {
     };
   }
 
-  async findAll(options: QueryOptionsDto) {
-    const { data, meta } = await TypeOrmQueryHelper.for(
-      this.userRepository,
-      options,
-      'user',
-    ).getManyAndMeta();
+  async findAllUsers(options: QueryOptionsDto) {
+    const cacheKey = usersCacheKeys.USERS_LIST(options);
+const queryDB = async ()=>{
+  const { data, meta } = await TypeOrmQueryHelper.for(
+    this.userRepository,
+    options,
+    {
+      searchableFields: [
+        'firstName', 
+        'lastName', 
+        'email', 
+        'whatsappNumber', 
+        'profileImage.originalName' // Deep Search: Automatically searches on the joined file name
+      ],
+      filterableFields: {
+        // Exact native mappings
+        email: 'email',
+        isActive: 'isActive',
+        
+        // Alias mappings (Frontend sends 'whatsapp', backend filters 'whatsappNumber')
+        whatsapp: 'whatsappNumber',
+        
+        // Deep relation filtering (Frontend sends 'hasInApp', backend filters joined table)
+        hasInApp: 'notificationOptions.inapp',
+        hasSocket: 'notificationOptions.socket',
+        fileName: 'profileImage.originalName',
+        imageSize: 'profileImage.size'
+      },
+      relations: ['profileImage', 'notificationOptions'],
+      selectFields: [
+        'id',
+        'firstName',
+        'lastName',
+        'email',
+        'isActive',
+        'createdAt',
+        'profileImage.id',
+        'profileImage.path',
+        'profileImage.originalName',
+        'notificationOptions.email',
+        'notificationOptions.inapp',
+        'notificationOptions.socket',
+      ],
+      defaultSort: 'isActive:DESC,createdAt:DESC', // By default, shows active users first, then by newest
+    },
+    'u',
+  ).getManyAndMeta();
+
+  return {data, meta};
+}
+
+const {data, cached} = await this.redisCacheService.getOrSet(cacheKey, queryDB, options);
+   
 
     return {
       status: 'success',
       message: 'Users fetched successfully',
-      data,
-      meta,
+      data : data?.data,
+      meta: data.meta ,
+      cached
     };
   }
 
-  async findOne(id: string) {
-    const user = await this.userRepository.findOne({ where: { id } });
-    if (!user) {
-      throw new NotFoundException('User not found');
+  async findOneUser(id: string) {
+
+    const cacheKey = usersCacheKeys.USERS_SINGLE(id)
+    const queryDB = async ()=>{
+      const user = await this.userRepository.findOne({ where: { id } });
+      if (!user) {
+        throw new NotFoundException('User not found');
+      }
+      return user;
     }
+    const {data, cached} = await this.redisCacheService.getOrSet(cacheKey, queryDB);
+   
     return {
       status: 'success',
       message: 'User fetched successfully',
-      data: user,
+      data: data,
+      cached
     };
   }
 
-  async update(id: string, updateUserDto: UpdateUserDto) {
+  async updateUser(id: string, updateUserDto: UpdateUserDto) {
+    const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
+    const cacheKeySingle = usersCacheKeys.USERS_SINGLE(id);
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
     await this.userRepository.update(id, updateUserDto);
+    this.redisCacheService.delByPrefix(cacheKey);
+    this.redisCacheService.del(cacheKeySingle);
     return {
       status: 'success',
       message: 'User updated successfully',
@@ -163,7 +229,9 @@ export class UsersService {
     };
   }
 
-  async remove(id: string) {
+  async removeUser(id: string) {
+    const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
+    const cacheKeySingle = usersCacheKeys.USERS_SINGLE(id);
     const user = await this.userRepository.findOne({
       where: { id },
       relations: ['profileImage'],
@@ -186,6 +254,8 @@ export class UsersService {
 
     // 3. Delete the user record
     await this.userRepository.remove(user);
+    this.redisCacheService.delByPrefix(cacheKey);
+    this.redisCacheService.del(cacheKeySingle);
 
     return {
       status: 'success',
