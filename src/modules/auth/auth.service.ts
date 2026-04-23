@@ -17,6 +17,7 @@ import { sessionCacheKeys, userDeviceCacheKeys } from 'src/common/redis/keys';
 import { UserDevice } from '../users/entities/user-device.entity';
 import { NotificationProducerService } from '../../notifications/notification-producer.service';
 import { NotificationEventType } from '../../notifications/notification.events';
+import { AuditPublisherService } from '../audit/audit-publisher.service';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +34,7 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly configService: ConfigService,
     private readonly notificationProducerService: NotificationProducerService,
+    private readonly auditPublisher: AuditPublisherService,
   ) {}
 
   async login(loginDto: LoginDto, req: Request, res: Response) {
@@ -255,6 +257,14 @@ export class AuthService {
       }
     });
 
+    // AUDIT LOG: Single Session Logout
+    this.auditPublisher.publishAuditLog({
+      module: 'Auth',
+      action: 'LOGOUT',
+      recordId: user.userId,
+      message: `User logged out from session: ${user.sessionId}`
+    }, req);
+
     return {status:"success", message: 'User Logout Successfully' };
   }
 
@@ -284,6 +294,14 @@ export class AuthService {
       }
     });
 
+    // AUDIT LOG: All Sessions Logout
+    this.auditPublisher.publishAuditLog({
+      module: 'Auth',
+      action: 'LOGOUT',
+      recordId: user.userId,
+      message: `User logged out from ALL active sessions`
+    }, req);
+
     return {status:"success", message: 'User Logout from all Sessions Successfully' };
   }
 
@@ -312,6 +330,14 @@ export class AuthService {
         reason: 'Logged out from other devices'
       }
     });
+
+    // AUDIT LOG: Other Sessions Logout
+    this.auditPublisher.publishAuditLog({
+      module: 'Auth',
+      action: 'LOGOUT',
+      recordId: user.userId,
+      message: `User revoked all other active sessions except: ${user.sessionId}`
+    }, req);
     
     return { status: 'success', message: 'User Logout from other Sessions Successfully' };
   }

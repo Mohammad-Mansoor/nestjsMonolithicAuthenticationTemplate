@@ -16,6 +16,9 @@ import { NotificationProducerService } from '../../notifications/notification-pr
 import { NotificationEventType } from '../../notifications/notification.events';
 import { UsersNotificationOptionsService } from '../users_notification_options/users_notification_options.service';
 import { usersCacheKeys } from 'src/common/redis/keys';
+import { AuditPublisherService } from '../audit/audit-publisher.service';
+import { AuditDiffUtility } from '../audit/utils/audit-diff.utility';
+import { Request } from 'express';
 
 @Injectable()
 export class UsersService {
@@ -25,9 +28,10 @@ export class UsersService {
     private readonly redisCacheService: RedisCacheService,
     private readonly notificationService: NotificationProducerService,
     private readonly usersNotificationOptionService: UsersNotificationOptionsService,
+    private readonly auditPublisher: AuditPublisherService,
   ) {}
 
-  async updateProfileImage(userId: string, file: Express.Multer.File) {
+  async updateProfileImage(userId: string, file: Express.Multer.File, req: Request) {
     const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
     const cacheKeySingle = usersCacheKeys.USERS_SINGLE(userId);
     const user = await this.userRepository.findOne({
@@ -58,6 +62,16 @@ export class UsersService {
 
     user.profileImage = savedFile;
     const updatedUser = await this.userRepository.save(user);
+
+    // AUDIT LOG: Profile Image Update
+    this.auditPublisher.publishAuditLog({
+      module: 'User',
+      action: 'UPDATE',
+      recordId: userId,
+      message: `User updated profile image: ${savedFile.originalName}`,
+      changes: [{ field: 'profileImage', old: 'Previous Image', new: savedFile.originalName }]
+    }, req);
+
     await this.redisCacheService.delByPrefix(cacheKey);
     await this.redisCacheService.del(cacheKeySingle);
     return {
@@ -67,7 +81,7 @@ export class UsersService {
     };
   }
 
-  async createUser(createUserDto: CreateUserDto, file: Express.Multer.File) {
+  async createUser(createUserDto: CreateUserDto, file: Express.Multer.File, req: Request) {
     const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
     const user = await this.userRepository.findOne({
       where: { email: createUserDto.email },
@@ -121,6 +135,17 @@ await this.redisCacheService.delByPrefix(cacheKey);
       }
     });
 
+
+    this.redisCacheService.delByPrefix(cacheKey);
+
+    // AUDIT LOG: User Creation
+    this.auditPublisher.publishAuditLog({
+      module: 'User',
+      action: 'CREATE',
+      recordId: savedUser.id,
+      message: `New user created: ${savedUser.email}`,
+      changes: AuditDiffUtility.getChanges({}, savedUser)
+    }, req);
 
     return {
       status: 'success',
@@ -212,16 +237,32 @@ const {data, cached} = await this.redisCacheService.getOrSet(cacheKey, queryDB, 
     };
   }
 
-  async updateUser(id: string, updateUserDto: UpdateUserDto) {
+  async updateUser(id: string, updateUserDto: UpdateUserDto, req: Request) {
     const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
     const cacheKeySingle = usersCacheKeys.USERS_SINGLE(id);
     const user = await this.userRepository.findOne({ where: { id } });
     if (!user) {
       throw new NotFoundException('User not found');
     }
+
+    // Capture changes for Audit Log
+    const changes = AuditDiffUtility.getChanges(user, { ...user, ...updateUserDto });
+
     await this.userRepository.update(id, updateUserDto);
     this.redisCacheService.delByPrefix(cacheKey);
     this.redisCacheService.del(cacheKeySingle);
+
+    // AUDIT LOG: User Update
+    if (changes.length > 0) {
+      this.auditPublisher.publishAuditLog({
+        module: 'User',
+        action: 'UPDATE',
+        recordId: id,
+        message: `User updated profile information: ${user.email}`,
+        changes: changes
+      }, req);
+    }
+
     return {
       status: 'success',
       message: 'User updated successfully',
@@ -229,7 +270,7 @@ const {data, cached} = await this.redisCacheService.getOrSet(cacheKey, queryDB, 
     };
   }
 
-  async removeUser(id: string) {
+  async removeUser(id: string, req: Request) {
     const cacheKey = usersCacheKeys.USERS_LIST(undefined, true);
     const cacheKeySingle = usersCacheKeys.USERS_SINGLE(id);
     const user = await this.userRepository.findOne({
@@ -253,9 +294,19 @@ const {data, cached} = await this.redisCacheService.getOrSet(cacheKey, queryDB, 
     await this.fileService.removeByReference(id, FileReferenceType.USER_PROFILE);
 
     // 3. Delete the user record
+    const userSnapshot = { ...user };
     await this.userRepository.remove(user);
     this.redisCacheService.delByPrefix(cacheKey);
     this.redisCacheService.del(cacheKeySingle);
+
+    // AUDIT LOG: User Deletion
+    this.auditPublisher.publishAuditLog({
+      module: 'User',
+      action: 'DELETE',
+      recordId: id,
+      message: `User deleted account: ${userSnapshot.email}`,
+      changes: AuditDiffUtility.getChanges(userSnapshot, {})
+    }, req);
 
     return {
       status: 'success',

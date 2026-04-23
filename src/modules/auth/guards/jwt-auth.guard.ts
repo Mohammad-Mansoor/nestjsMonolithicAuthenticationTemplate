@@ -11,6 +11,7 @@ import { AUTH_TYPE_KEY, AuthType } from '../decorators/auth.decorator';
 import { SessionsService } from '../../users/sessions.service';
 import { ConfigService } from '@nestjs/config';
 import * as crypto from 'crypto';
+import { v4 as uuidv4 } from 'uuid';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -65,10 +66,25 @@ export class JwtAuthGuard implements CanActivate {
         throw new UnauthorizedException('Session is invalid, revoked, or used on an unrecognized device');
       }
 
-      // 5. Attach session data to request object
+      // 5. Attach session and audit metadata to the request object
+      // This context will be used by the AuditPublisherService
+      const sessionData = session?.data || session;
+      console.log("sessionData for audit log", sessionData)
       request['user'] = {
         userId: payload.userId,
         sessionId: payload.sessionId,
+      };
+
+      request['auditContext'] = {
+        requestId: uuidv4(),
+        ipAddress: sessionData.ipAddress,
+        userAgent: sessionData.userAgent,
+        deviceInfo: {
+          browser: sessionData.browser,
+          os: sessionData.os,
+          deviceType: sessionData.deviceType,
+          deviceName: sessionData.deviceName,
+        }
       };
       
       return true;

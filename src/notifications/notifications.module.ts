@@ -16,11 +16,15 @@ import { NotificationProducerService } from './notification-producer.service';
             name: 'notifications.exchange',
             type: 'topic',
           },
+          {
+            name: 'app.events',
+            type: 'topic',
+          },
         ],
       }),
     }),
   ],
   providers: [NotificationProducerService],
-  exports: [NotificationProducerService],
+  exports: [NotificationProducerService, RabbitMQModule],
 })
 export class NotificationsModule {}

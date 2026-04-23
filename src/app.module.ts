@@ -11,6 +11,7 @@ import { JwtAuthGuard } from './modules/auth/guards/jwt-auth.guard';
 import { APP_GUARD } from '@nestjs/core';
 import { NotificationsModule } from './notifications/notifications.module';
 import { UsersNotificationOptionsModule } from './modules/users_notification_options/users_notification_options.module';
+import { AuditModule } from './modules/audit/audit.module';
 
 @Module({
   imports: [
@@ -38,6 +39,7 @@ import { UsersNotificationOptionsModule } from './modules/users_notification_opt
     FileModule,
     AuthModule,
     RedisCacheModule,
+    AuditModule,
     NotificationsModule,
     UsersNotificationOptionsModule,
   ],
