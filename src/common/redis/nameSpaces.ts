@@ -5,6 +5,7 @@ interface NameSpaces {
     USERS_NOTIFICATION_OPTIONS: 'users_notification_options';
     USER_DEVICE: 'user_device';
     FILES: 'files';
+    OTP: 'otp';
 }
 
 export const nameSpaces: NameSpaces = {
@@ -14,4 +15,5 @@ export const nameSpaces: NameSpaces = {
     USERS_NOTIFICATION_OPTIONS: 'users_notification_options',
     USER_DEVICE: 'user_device',
     FILES: 'files',
+    OTP: 'otp',
 }

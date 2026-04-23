@@ -84,3 +84,13 @@ export const fileCacheKeys = {
         return generateCacheKey(nameSpaces.FILES, 'list', query || {});
     },
 }
+
+export const otpCacheKeys = {
+    FORGOT_PASSWORD_OTP: (email: string, channel: string, isPrefix: boolean = false) => {
+        if (isPrefix) return `${nameSpaces.OTP}:forgot-password`;
+        return `${nameSpaces.OTP}:forgot-password:${email}:${channel}`;
+    },
+    OTP_ATTEMPTS_COUNT: (email: string) => `${nameSpaces.OTP}:attempts-count:${email}`,
+    OTP_LOCKED: (email: string) => `${nameSpaces.OTP}:locked:${email}`,
+    RESET_PASSWORD_TOKEN: (email: string) => `${nameSpaces.OTP}:reset-token:${email}`,
+}

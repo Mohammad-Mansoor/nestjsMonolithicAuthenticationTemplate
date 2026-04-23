@@ -4,7 +4,7 @@ import { Request } from 'express';
 
 export interface AuditLogData {
   module: string;
-  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'SYSTEM_ACTION';
+  action: 'CREATE' | 'UPDATE' | 'DELETE' | 'LOGIN' | 'LOGOUT' | 'SYSTEM_ACTION' | 'PASSWORD_RESET';
   recordId: string;
   changes?: Array<{ field: string; old: any; new: any }>;
   message?: string;
@@ -28,14 +28,19 @@ export class AuditPublisherService {
     // 1. Prepare Payload with context from Request (populated by JwtAuthGuard)
     const auditContext = req?.['auditContext'] || {};
     const userContext = (req?.['user'] as any) || {};
-
+const fallbackDeviceInfo = {
+  browser: req ? req.headers['x-browser'] as string || "Unknown Browser": "Unknown Browser",
+  os: req ? req.headers['x-os'] as string || "Unknown OS": "Unknown OS",
+  deviceType: req ? req.headers['x-device-type'] as string || "Unknown Device Type": "Unknown Device Type",
+  deviceName: req ? req.headers['x-device-name'] as string || "Unknown Device Name": "Unknown Device Name"
+}
     const payload = {
       ...data,
       userId: userContext.userId || 'SYSTEM',
       sessionId: userContext.sessionId,
       requestId: auditContext.requestId,
-      ipAddress: auditContext.ipAddress,
-      deviceInfo: auditContext.deviceInfo,
+      ipAddress: auditContext.ipAddress || req?.ip,
+      deviceInfo: auditContext.deviceInfo || fallbackDeviceInfo,
       createdAt: new Date().toISOString(),
     };
 

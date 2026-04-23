@@ -128,6 +128,32 @@ export class RedisCacheService implements OnModuleInit {
   }
 
   /**
+   * Check if a specific cache key exists.
+   */
+  async exists(key: string, namespace?: string): Promise<boolean> {
+    const fullKey = this.buildKey(key, namespace);
+    const result = await this.client.exists(fullKey);
+    return result === 1;
+  }
+
+  /**
+   * Increment a value in Redis.
+   * If TTL is provided, it is set only if the key is new (result === 1).
+   */
+  async incr(
+    key: string,
+    ttl?: number,
+    namespace?: string,
+  ): Promise<number> {
+    const fullKey = this.buildKey(key, namespace);
+    const result = await this.client.incr(fullKey);
+    if (result === 1 && ttl) {
+      await this.client.expire(fullKey, ttl);
+    }
+    return result;
+  }
+
+  /**
    * Delete all cache keys that start with a given prefix.
    * Example: prefix = "auth:role:roles:list"
    */

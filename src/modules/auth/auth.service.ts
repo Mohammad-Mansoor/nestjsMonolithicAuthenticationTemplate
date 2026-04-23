@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { UsersService } from '../users/users.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { User } from '../users/entities/user.entity';
@@ -13,11 +13,14 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { v4 as uuidv4 } from 'uuid';
 import { SessionsService } from '../users/sessions.service';
-import { sessionCacheKeys, userDeviceCacheKeys } from 'src/common/redis/keys';
+import { otpCacheKeys, sessionCacheKeys, userDeviceCacheKeys } from 'src/common/redis/keys';
 import { UserDevice } from '../users/entities/user-device.entity';
 import { NotificationProducerService } from '../../notifications/notification-producer.service';
-import { NotificationEventType } from '../../notifications/notification.events';
+import { NotificationChannel, NotificationEventType } from '../../notifications/notification.events';
 import { AuditPublisherService } from '../audit/audit-publisher.service';
+import { generateSecurePassword } from 'src/common/utils/getRandomPassword';
+import { getActiveNotificationChannels } from 'src/common/helpers/getActiveNotificationChannels';
+import { generateOtp } from 'src/common/utils/getRandomOtp';
 
 @Injectable()
 export class AuthService {
@@ -164,6 +167,189 @@ export class AuthService {
       message: 'Login successful', 
       data: { accessToken: accessToken } 
     };
+  }
+
+  async resetPassword(userId: string, req: Request, res: Response) {
+    const  user = await this.userRepository.findOne({where: {id: userId, isActive: true}, relations: ['notificationOptions']})
+    if(!user){
+      throw new BadRequestException('User not found or inactive');
+    }
+
+    const password = generateSecurePassword(8)
+    user.password = await bcrypt.hash(password, 10);
+    await this.userRepository.save(user);
+
+    const channels = getActiveNotificationChannels(user.notificationOptions)
+if(channels.length>0){
+    this.notificationProducerService.send({
+      type: NotificationEventType.PASSWORD_RESET,
+      channels: channels,
+      payload: {
+        email: user.email,
+        userName: `${user.firstName} ${user.lastName}`,
+        password: password,
+        loginUrl: `${this.configService.get<string>('LOGIN_PAGE_URL')}`,
+      }
+    });
+    // Notify the Socket Gateway via RabbitMQ
+    this.notificationProducerService.send({
+      type: NotificationEventType.SESSION_REVOKED,
+      channels: ['socket'],
+      payload: { 
+        userId: user.id, 
+        target: 'ALL',
+        reason: 'Password Reset'
+      }
+    });
+  }
+  this.auditPublisher.publishAuditLog({
+    module: 'Auth',
+    action: 'PASSWORD_RESET',
+    recordId: user.id,
+    message: 'Password reset successfully',   
+  }, req)
+  this.sessionsService.invalidateAllSessions(user.id, "All Sessions Revoked due to Password Reset")
+
+  return {status: "success", message: "password Reset and notification send via "+channels.join(", ")}
+    
+    
+  }
+
+  async forgotPassword(data: {email:string, channel: 'whatsapp'|'email'|'telegram'}, req:Request, res:Response){
+    const {email, channel} = data
+
+    // 1. Check if user is locked
+    const lockKey = otpCacheKeys.OTP_LOCKED(email);
+    const isLocked = await this.redisCacheService.exists(lockKey);
+    if (isLocked) {
+      throw new ForbiddenException('Too many attempts. You are locked for 1 hour.');
+    }
+
+    const user = await this.userRepository.findOne({where: {email, isActive: true}, relations: ['notificationOptions']})
+    if(!user){
+      throw new BadRequestException('Invalid Email');
+    }
+
+    if (channel === 'whatsapp') {
+      if (!user.notificationOptions.whatsapp){
+        throw new BadRequestException('Whatsapp notification is not enabled for this user');
+      }
+    }
+
+    if (channel === 'email'){
+      if (!user.notificationOptions.email){
+        throw new BadRequestException('Email notification is not enabled for this user');
+      }
+    }
+
+    if (channel === 'telegram'){
+      if (!user.notificationOptions.telegram){
+        throw new BadRequestException('Telegram notification is not enabled for this user');
+      }
+    }
+
+    // 2. Track attempts
+    const attemptsKey = otpCacheKeys.OTP_ATTEMPTS_COUNT(email);
+    const attempts = await this.redisCacheService.incr(attemptsKey, 86400); // 24h reset
+    if (attempts > 5) {
+      await this.redisCacheService.set(lockKey, true, 3600); // Lock for 1 hour
+      throw new ForbiddenException('Too many attempts. You are locked for 1 hour.');
+    }
+
+    const otp = generateOtp(6)
+
+    // 3. Persist OTP for verification
+    const otpKey = otpCacheKeys.FORGOT_PASSWORD_OTP(email, channel);
+    await this.redisCacheService.set(otpKey, otp, 600); // 10 minutes TTL
+
+    this.notificationProducerService.send({
+      type: NotificationEventType.FORGOT_PASSWORD,
+      channels: [channel],
+      payload: {
+        email:user.email,
+        userName: `${user.firstName} ${user.lastName}`,
+        otpCode: otp,
+        validityMinutes: 10,
+        requestTime: new Date().toLocaleString(),
+        expirationTime: new Date(Date.now() + 10 * 60 * 1000).toLocaleString(),
+        supportEmail: this.configService.get<string>('SUPPORT_EMAIL'),
+        
+      }
+    });
+
+    return { status: 'success', message: `OTP sent via ${channel}` };
+  }
+
+  async verifyForgotPasswordOtp(data: { email: string, channel: string, otp: string }) {
+    const { email, channel, otp } = data;
+    const otpKey = otpCacheKeys.FORGOT_PASSWORD_OTP(email, channel);
+    const attemptsKey = otpCacheKeys.OTP_ATTEMPTS_COUNT(email);
+
+    const cachedOtp = await this.redisCacheService.get(otpKey);
+    
+    if (!cachedOtp.data || cachedOtp.data !== otp) {
+      throw new BadRequestException('Invalid or expired OTP');
+    }
+
+    // Success: Clear history and OTP
+    await this.redisCacheService.del(otpKey);
+    await this.redisCacheService.del(attemptsKey);
+
+    // Generate a temporary reset token valid for 15 minutes
+    const resetToken = uuidv4();
+    const resetTokenKey = otpCacheKeys.RESET_PASSWORD_TOKEN(email);
+    await this.redisCacheService.set(resetTokenKey, resetToken, 900);
+
+    return { 
+      status: 'success', 
+      message: 'OTP verified successfully',
+      data: { resetToken }
+    };
+  }
+
+  async completePasswordReset(data: { email: string, resetToken: string, newPassword: string }, req: Request) {
+    const { email, resetToken, newPassword } = data;
+    const resetTokenKey = otpCacheKeys.RESET_PASSWORD_TOKEN(email);
+
+    const cachedToken = await this.redisCacheService.get(resetTokenKey);
+    
+    if (!cachedToken.data || cachedToken.data !== resetToken) {
+      throw new BadRequestException('Invalid or expired reset token');
+    }
+
+    const user = await this.userRepository.findOne({ where: { email, isActive: true } });
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    // Hash and update the password
+    user.password = await bcrypt.hash(newPassword, 10);
+    await this.userRepository.save(user);
+
+    // Clean up the reset token
+    await this.redisCacheService.del(resetTokenKey);
+
+    // Audit the action
+    this.auditPublisher.publishAuditLog({
+      module: 'Auth',
+      action: 'PASSWORD_RESET',
+      recordId: user.id,
+      message: 'User successfully reset password via OTP flow',
+    }, req);
+    // Notify the Socket Gateway via RabbitMQ
+    this.notificationProducerService.send({
+      type: NotificationEventType.SESSION_REVOKED,
+      channels: ['socket'],
+      payload: { 
+        userId: user.id, 
+        target: 'ALL',
+        reason: 'Password Reset'
+      }
+    });
+
+    this.sessionsService.invalidateAllSessions(user.id, "All Sessions Revoked due to Forgot Password Reset Password")
+
+    return { status: 'success', message: 'Password has been reset successfully' };
   }
 
   async refreshToken(req: Request, res: Response) {
