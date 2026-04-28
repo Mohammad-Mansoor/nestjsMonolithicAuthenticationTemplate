@@ -262,7 +262,7 @@ if(channels.length>0){
     const otpKey = otpCacheKeys.FORGOT_PASSWORD_OTP(email, channel);
     await this.redisCacheService.set(otpKey, otp, 600); // 10 minutes TTL
 
-    this.notificationProducerService.send({
+    await this.notificationProducerService.send({
       type: NotificationEventType.FORGOT_PASSWORD,
       channels: [channel],
       payload: {

@@ -10,6 +10,7 @@ import { UserDevice } from './entities/user-device.entity';
 import { UsersNotificationOptionsModule } from '../users_notification_options/users_notification_options.module';
 import { UserDeviceService } from './user-device.service';
 import { UserDeviceController } from './user-device.controller';
+import { SessionsController } from './sessions.controller';
 
 @Module({
   imports: [
@@ -17,7 +18,7 @@ import { UserDeviceController } from './user-device.controller';
     FileModule,
     UsersNotificationOptionsModule,
   ],
-  controllers: [UsersController, UserDeviceController],
+  controllers: [UsersController, UserDeviceController, SessionsController],
   providers: [UsersService, SessionsService,UserDeviceService],
   exports: [UsersService, SessionsService, TypeOrmModule,UserDeviceService],
 })

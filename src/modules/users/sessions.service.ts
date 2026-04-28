@@ -7,6 +7,7 @@ import { ConfigService } from "@nestjs/config";
 import { sessionCacheKeys } from "src/common/redis/keys";
 import { nameSpaces } from "src/common/redis/nameSpaces";
 import { UserDevice } from "./entities/user-device.entity";
+import { TypeOrmQueryHelper } from "src/common/helpers/typeorm-query.helper";
 
 
 @Injectable()
@@ -35,7 +36,7 @@ export class SessionsService{
     async findSessionById(sessionId: string) {
         const cacheKey = sessionCacheKeys.SINGLE_SESSION(sessionId)
         const queryDb = async ()=>{
-            const session = await this.sessionsRepository.findOne({where: {id: sessionId}})
+            const session = await this.sessionsRepository.findOne({where: {id: sessionId}, relations:['users']})
             if(!session){
                 return null;
             }
@@ -46,17 +47,24 @@ export class SessionsService{
 
     async findUserSessions(userId: string, query:any) {
         const cacheKey = sessionCacheKeys.USER_SESSIONS(userId, query)
-        const queryDb = async ()=>{
-            const sessions = await this.sessionsRepository.find({where: {userId}})
-            if(!sessions){
-                return [];
-            }
-            return sessions;
+        const queryDB = async()=>{
+            const {data, meta} = await TypeOrmQueryHelper.for(this.sessionsRepository,{...query}, {
+                searchableFields: ['deviceName', 'deviceType', 'browser', 'os', 'userAgent', 'ipAddress'],
+                filterableFields: {
+                    deviceType: 'deviceType',
+                    isValid: "isValid",
+
+                },
+                relations: ['user','user.profileImage'],
+                selectFields:['id', 'ipAddress', 'userAgent', 'deviceId', 'deviceName', 'deviceType', 'os', 'browser', 'isValid', 'expiresAt', 'lastActiveAt', 'user.id', "user.firstName", "user.lastName", "user.profileImage"],
+                defaultSort: 'createdAt:DESC'
+            }, 's').getManyAndMeta();
+            return {data, meta};
         }
 
         const response =  {
             message: "User sessions retrieved successfully.",
-            data: await this.redisCacheService.getOrSet(cacheKey, queryDb),
+            data: await this.redisCacheService.getOrSet(cacheKey, queryDB),
         }
         return response;
     }
